@@ -1,7 +1,7 @@
 import itk
 
 from src.load_data import load_image, downsample, print_image_info
-from src.registration import rigid_registration, rigid_registration, resample_image
+from src.registration import translation_registration, rigid_registration, affine_registration, resample_image
 from src.registration_utils import get_rmse, show_slices, show_overlap_slices
 
 def main_registration():
@@ -12,16 +12,19 @@ def main_registration():
 
     # downspample images to go faster
     rigid_tx = rigid_registration(downsample(fixed), downsample(moving))
-    moved_rigid = resample_image(fixed, moving, rigid_tx)
+    # init transform with rigid registration
+    affine_tx = affine_registration(downsample(fixed), downsample(moving), initial_transform=rigid_tx)
+    # apply transforms
+    moved = resample_image(fixed, moving, affine_tx)
 
     # cast to get lighter file (original files already using short type)
-    caster = itk.CastImageFilter[itk.Image[itk.F,3], itk.Image[itk.SS, 3]].New(Input=moved_rigid)
+    caster = itk.CastImageFilter[itk.Image[itk.F,3], itk.Image[itk.SS, 3]].New(Input=moved)
     itk.imwrite(caster.GetOutput(), "data/rigid_registered.nrrd", compression=True)
 
-    print(f"RMSE Before: {get_rmse(fixed, moving)}, RMSE After: {get_rmse(fixed, moved_rigid)}")
+    print(f"RMSE Before: {get_rmse(fixed, moving)}, RMSE After: {get_rmse(fixed, moved)}")
     # show registration
-    show_slices(fixed, moved_rigid)
-    show_overlap_slices(fixed, moved_rigid)
+    show_slices(fixed, moved)
+    show_overlap_slices(fixed, moved)
     
 if __name__ == "__main__":
     main_registration()

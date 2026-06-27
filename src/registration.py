@@ -68,10 +68,57 @@ def rigid_registration(fixed, moving):
     registration.SetOptimizer(optimizer)
     registration.SetFixedImage(fixed)
     registration.SetMovingImage(moving)
+    # (to delete) level 1 for debug to go faster (but bad results)
     registration.SetNumberOfLevels(1)
     registration.Update()
     print("Rigid registration done")
-    return registration.GetTransform()
+    return transform
+
+def affine_registration(fixed, moving, initial_transform=None):
+    ImageType = itk.Image[itk.F, 3]
+    AffineTransformType = itk.AffineTransform[itk.D, 3]
+    registration = itk.ImageRegistrationMethodv4[ImageType, ImageType].New()
+    # transform
+    transform = AffineTransformType.New()
+    if initial_transform is not None:
+        # warm start from precalculated (rigid) transformation
+        transform.SetCenter(initial_transform.GetCenter())
+        transform.SetMatrix(initial_transform.GetMatrix())
+        transform.SetTranslation(initial_transform.GetTranslation())
+    else:
+        # otherwise classic centered init
+        initializer = itk.CenteredTransformInitializer[AffineTransformType, ImageType, ImageType].New()
+        initializer.SetTransform(transform)
+        initializer.SetFixedImage(fixed)
+        initializer.SetMovingImage(moving)
+        initializer.GeometryOn()
+        initializer.InitializeTransform()
+    registration.SetInitialTransform(transform)
+    registration.InPlaceOn()
+    # metric
+    metric = itk.MattesMutualInformationImageToImageMetricv4[ImageType, ImageType].New()
+    metric.SetNumberOfHistogramBins(50)
+    registration.SetMetric(metric)
+    # optimizer
+    optimizer = itk.RegularStepGradientDescentOptimizerv4[itk.D].New()
+    optimizer.SetLearningRate(1.0)
+    optimizer.SetMinimumStepLength(1e-4)
+    optimizer.SetNumberOfIterations(300)
+    optimizer.SetRelaxationFactor(0.5)
+    # set different scales learning rates according to rotation (rad) or translation (mm)
+    scales = itk.OptimizerParameters[itk.D](12)
+    for i in range(9):
+        scales[i] = 1.0
+    for i in range(9, 12):
+        scales[i] = 0.001
+    optimizer.SetScales(scales)
+    # registration parameters
+    registration.SetOptimizer(optimizer)
+    registration.SetFixedImage(fixed)
+    registration.SetMovingImage(moving)
+    registration.Update()
+    print("Affine registration done")
+    return transform
 
 def resample_image(fixed, moving, transform):
     ResampleFilter = itk.ResampleImageFilter[itk.Image[itk.F, 3], itk.Image[itk.F, 3]].New()
