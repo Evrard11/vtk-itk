@@ -71,6 +71,7 @@ rééchantillonnage final par `ResampleImageFilter` (interpolation linéaire).
 RMSE avant recalage : ~0.114
 RMSE après recalage : ~0.074
 ```
+Les visualisations produites (`show_slices`, `show_overlap_slices`) permettent d'inspecter l'alignement coupe par coupe.
 
 La superposition des coupes axiales centrales et l'image de différence confirment visuellement l'alignement : les structures anatomiques se chevauchent correctement et les zones de désalignement se limitent aux abords de la tumeur, là où une déformation locale subsiste entre les deux acquisitions.
 
