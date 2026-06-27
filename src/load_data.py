@@ -9,10 +9,8 @@ def load_image(path: str):
 
 def downsample(image):
     ImageType = type(image)
-    shrink = itk.ShrinkImageFilter[ImageType, ImageType].New(
-        Input=image,
-        ShrinkFactors=[3, 3, 3]
-    )
+    # bin shrink to lower blur
+    shrink = itk.BinShrinkImageFilter[ImageType, ImageType].New(Input=image, ShrinkFactors=[3, 3, 3])
     shrink.Update()
     return shrink.GetOutput()
 
