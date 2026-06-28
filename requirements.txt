@@ -2,3 +2,4 @@ itk==5.*
 matplotlib>=3.0.2
 vtk==9.6.*
 numpy>=2.2.6
+scipy>=1.0.0

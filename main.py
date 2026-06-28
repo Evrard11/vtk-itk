@@ -3,30 +3,33 @@ import itk
 from src.load_data import load_image, downsample, print_image_info
 from src.registration import translation_registration, rigid_registration, affine_registration, b_spline_registration, resample_image
 from src.registration_utils import get_rmse, show_slices, show_overlap_slices
+from src.segmentation import run_segmentation
 
 def main_registration():
     fixed = load_image("data/case6_gre1.nrrd")
     moving = load_image("data/case6_gre2.nrrd")
-    d_fixed, d_moving = downsample(fixed), downsample(moving)
     print_image_info(fixed, "Fixed")
     print_image_info(moving, "Moving")
 
-    # downspample images to go faster
-    rigid_tx = rigid_registration(d_fixed, d_moving)
-    # init transform with rigid registration
-    affine_tx = affine_registration(d_fixed, d_moving, initial_transform=rigid_tx)
-    bspline_tx = b_spline_registration(d_fixed, d_moving, initial_transform=affine_tx)
-    # apply transforms
-    moved = resample_image(fixed, moving, bspline_tx)
+    import os
+    registered_path = "data/case6_gre2_registered.nrrd"
+    if os.path.exists(registered_path):
+        print("Recalage déjà effectué, chargement du fichier existant.")
+        moved = load_image(registered_path)
+    else:
+        d_fixed, d_moving = downsample(fixed), downsample(moving)
+        rigid_tx = rigid_registration(d_fixed, d_moving)
+        affine_tx = affine_registration(d_fixed, d_moving, initial_transform=rigid_tx)
+        bspline_tx = b_spline_registration(d_fixed, d_moving, initial_transform=affine_tx)
+        moved = resample_image(fixed, moving, bspline_tx)
+        caster = itk.CastImageFilter[itk.Image[itk.F,3], itk.Image[itk.SS, 3]].New(Input=moved)
+        itk.imwrite(caster.GetOutput(), registered_path, compression=True)
+        print(f"RMSE Before: {get_rmse(fixed, moving)}, RMSE After: {get_rmse(fixed, moved)}")
+        show_slices(fixed, moved)
+        show_overlap_slices(fixed, moved)
 
-    # cast to get lighter file (original files already using short type)
-    caster = itk.CastImageFilter[itk.Image[itk.F,3], itk.Image[itk.SS, 3]].New(Input=moved)
-    itk.imwrite(caster.GetOutput(), "data/case6_gre2_registered.nrrd", compression=True)
+    # Segmentation
+    run_segmentation(fixed, moved)
 
-    print(f"RMSE Before: {get_rmse(fixed, moving)}, RMSE After: {get_rmse(fixed, moved)}")
-    # show registration
-    show_slices(fixed, moved)
-    show_overlap_slices(fixed, moved)
-    
 if __name__ == "__main__":
     main_registration()
