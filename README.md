@@ -81,3 +81,74 @@ La superposition des coupes axiales centrales et l'image de différence confirme
   la B-spline déforme des structures saines mais trop grossier, elle rate les déformations locales fines.
 - **Absence de masque** : la métrique est calculée sur le volume entier (fond inclus), ce qui dilue
   l'information sur les structures pertinentes.
+
+# 2. Segmentation
+
+La segmentation n'utilise pas les filtres ITK (region growing, etc) mais une approche seuillage + morphologie mathématique avec `scipy.ndimage`, appliquée sur les volumes convertis en tableaux numpy. Ce choix donne un contrôle plus direct sur l'enchaînement des opérations et facilite l'ajustement des paramètres.
+
+### 2.1 Seuillage par intensité
+
+Sur les séquences T1 utilisées ici, la tumeur apparaît hypointense (plus sombre que le parenchyme environnant). Un lissage gaussien (`sigma=2`) est appliqué en amont pour réduire le bruit, puis un double seuil `50 < intensité < 200` isole les zones sombres du corps tout en excluant le fond (intensité quasi nulle hors du crâne).
+
+### 2.2 Nettoyage morphologique
+
+Le seuillage seul capture aussi les autres structures fines et sombres. Une érosion (5 itérations) élimine ces structures tout en préservant la masse tumorale, plus compacte. Les composantes connexes sont ensuite labellisées (`ndi.label`), et celles qui touchent le bord du volume sont écartées (fond résiduel, artefacts en bordure de champ après recalage). Parmi les composantes restantes, la plus volumineuse est retenue comme tumeur.
+
+Une dilatation (5 itérations) puis une fermeture morphologique (3 itérations) compensent l'érosion initiale et lissent le contour final.
+
+### 2.3 Résultats
+
+Les deux masques sont exportés en `data/mask_gre1.nrrd` et `data/mask_gre2.nrrd`. Le script affiche en console le volume de chaque masque ainsi que le delta entre les deux acquisitions, base du calcul des métriques utilisées en partie 3.
+
+```
+Volume GRE1 : 93741 mm3
+Volume GRE2 : 104825 mm3
+Delta volume : +11084 mm3
+```
+
+Le volume tumoral augmente d'environ 11.8 % entre les deux acquisitions.
+
+### 2.4 Limites
+
+- **Seuils empiriques** : `50` et `200` sont calibrés sur ce cas précis et ne généralisent pas à d'autres situations.
+- **Hypothèse "plus grande composante non bordante"** : fonctionne ici car la tumeur est la structure sombre compacte dominante, mais échouerait en présence d'une autre masse sombre de volume comparable comme une lésion ou un artefact.
+- **Pas de contrainte anatomique** : la segmentation repose uniquement sur l'intensité et la compacité géométrique.
+
+# 3. Analyse et visualisation des changements
+
+### 3.1 Calcul des changements
+
+À partir des deux masques binaires, trois cartes sont calculées par opérations booléennes : `added` (présent en gre2, absent en gre1), `removed` (logique inverse) et `stable` (intersection). Ces trois matrices sont ensuite reconverties en images ITK avec les infos spatiales (spacing, origin, direction) du masque de référence.
+
+### 3.2 Métriques
+
+- **Volume** : nombre de voxels de chaque masque et delta.
+- **Intensité moyenne** : intensité moyenne de l'image originale à l'intérieur du masque, pour chaque instant.
+- **Dice** : coefficient de chevauchement `2 * |M1 ∩ M2| / (|M1| + |M2|)`, indicateur de la stabilité spatiale de la tumeur entre les deux acquisitions.
+
+```
+volume initial               : 93741 vox
+volume évolution             : 104825 vox
+delta des volumes            : +11084 vox
+intensité moyenne initial    : 99.80
+intensité moyenne évolution  : 104.84
+dice                         : 0.938
+```
+
+L'intensité moyenne à l'intérieur du masque augmente elle aussi (+5.0), cohérent avec une progression tumorale plutôt qu'un simple élargissement du contour sur fond identique. Le Dice élevé (0.938) confirme que le noyau de la tumeur reste spatialement stable le même : on peut en conclure que le delta du volume correspond à une extension de la masse existante et pas à l'apparition nouvelle d'une lésion.
+
+### 3.3 Visualisation VTK
+
+La scène superpose quatre couches via `vtkImageSliceMapper`/`vtkImageSlice` : l'image de base, puis les masques `stable` (jaune), `added` (vert) et `removed` (rouge), chacun avec un LUT à deux entrées (transparent / couleur) pour rester lisible en superposition.
+
+La coupe initiale est choisie automatiquement sur l'axe où la somme des voxels tumoraux (union des trois masques) est maximale, pour afficher une vue pertinente.
+
+Une classe d'interaction ajoute :
+- **Scroll** : navigation dans les coupes de l'axe actuel.
+- **Clic gauche** : après une rotation de caméra, l'axe dominant de la direction de projection est recalculé et l'orientation des coupes (sagittal/coronal/axial) bascule dans la foulée.
+- **Clic droit** : Change l'affichage des métriques en overlay (volume / intensité / dice).
+
+### 3.4 Limites
+
+- Le Dice et les volumes sont calculés sur le masque entier : en cas de lésions multiples, aucune distinction n'est faite entre elles.
+- La visualisation des changements dépend directement de la qualité du recalage et de la segmentation

@@ -39,6 +39,8 @@ def main_registration():
     # Visualisation
     added, removed, stable = compute_changes(mask_1, mask_2)
     metrics = compute_metrics(mask_1, mask_2, fixed, moved)
+    print("\nMetrics:")
+    print(metrics)
     render_change_overlay(fixed,added,removed,stable,metrics)
 
 if __name__ == "__main__":
